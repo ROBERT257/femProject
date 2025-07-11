@@ -26,6 +26,12 @@ func NewApplication() (*Application, error) {
 		return nil, fmt.Errorf("failed to connect to DB: %w", err)
 	}
 
+	// ✅ FIX: Change path from "." to "migrations"
+	err = store.Migrate(pgDB, "migrations")
+	if err != nil {
+		panic(err)
+	}
+
 	// 2. Setup logger
 	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
 
