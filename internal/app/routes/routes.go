@@ -1,7 +1,7 @@
 package routes
 
 import (
-	appPkg "github.com/ROBERT257/femproject/internal/app"
+	appPkg "github.com/ROBERT257/femProject/internal/app"
 	"github.com/go-chi/chi"
 )
 

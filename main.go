@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ROBERT257/femproject/internal/app"
-	"github.com/ROBERT257/femproject/internal/app/routes"
+	"github.com/ROBERT257/femProject/internal/app"
+	"github.com/ROBERT257/femProject/internal/app/routes"
 )
 
 func main() {
