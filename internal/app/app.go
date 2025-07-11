@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/ROBERT257/fem_project/internal/app/api"
-	"github.com/ROBERT257/fem_project/internal/store"
+	"github.com/ROBERT257/femproject/internal/app/api"
+	"github.com/ROBERT257/femproject/internal/store"
 )
 
 type Application struct {
