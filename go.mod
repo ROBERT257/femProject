@@ -1,4 +1,4 @@
-module fem_project
+module github.com/ROBERT257/femproject
 
 go 1.24
 

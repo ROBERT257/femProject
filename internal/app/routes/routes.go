@@ -1,11 +1,11 @@
 package routes
 
 import (
-	"github.com/ROBERT257/fem_project/internal/app"
+	appPkg "github.com/ROBERT257/femproject/internal/app"
 	"github.com/go-chi/chi"
 )
 
-func SetupRoutes(app *app.Application) *chi.Mux {
+func SetupRoutes(app *appPkg.Application) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Get("/health", app.Healthcheck)
