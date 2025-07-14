@@ -26,19 +26,22 @@ func NewApplication() (*Application, error) {
 		return nil, fmt.Errorf("failed to connect to DB: %w", err)
 	}
 
-	// ✅ FIX: Change path from "." to "migrations"
-	err = store.Migrate(pgDB, "migrations")
+	// 2. Run database migrations (if any)
+	err = store.Migrate(pgDB, "migrations") // ✅ make sure 'migrations' folder exists
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("migration failed: %w", err)
 	}
 
-	// 2. Setup logger
+	// 3. Setup logger
 	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
 
-	// 3. Create the WorkoutHandler
-	workoutHandler := api.NewWorkoutHandler()
+	// ✅ 4. Initialize WorkoutStore using the correct constructor
+	workoutStore := store.NewWorkoutStore(pgDB)
 
-	// 4. Bundle everything into the Application struct
+	// 5. Create the WorkoutHandler
+	workoutHandler := api.NewWorkoutHandler(workoutStore)
+
+	// 6. Bundle everything into the Application struct
 	app := &Application{
 		Logger:         logger,
 		WorkoutHandler: workoutHandler,
@@ -52,5 +55,5 @@ func NewApplication() (*Application, error) {
 
 // Healthcheck endpoint (GET /health)
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "my name is ROBERT, I AM A GO DEVELOPER, AND I AM LEARNING HOW TO BUILD A WEB APPLICATION WITH GO!")
+	fmt.Fprint(w, "My name is ROBERT. I am a Go developer, and I am learning how to build a web application with Go!")
 }
