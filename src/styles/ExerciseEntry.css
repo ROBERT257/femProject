@@ -1,0 +1,92 @@
+.exercise-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  background-color: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.exercise-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.exercise-number {
+  font-weight: 600;
+  color: var(--primary);
+  font-size: 1rem;
+}
+
+.btn-remove {
+  padding: 0.5rem 1rem;
+  background-color: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.btn-remove:hover {
+  background-color: #fee2e2;
+}
+
+.exercise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.toggle-group {
+  display: flex;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.toggle-btn {
+  flex: 1;
+  padding: 0.5rem;
+  background-color: var(--bg);
+  color: var(--text-light);
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+  background-color: var(--bg-alt);
+}
+
+.toggle-btn.active {
+  background-color: var(--primary);
+  color: white;
+}
+
+.entry-notes {
+  padding: 1rem;
+  background-color: var(--bg);
+  border-left: 3px solid var(--secondary);
+  border-radius: 0.25rem;
+}
+
+.entry-notes strong {
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .exercise-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .exercise-entry {
+    padding: 1rem;
+  }
+}
