@@ -7,6 +7,10 @@ const defaultEntry = (orderIndex = 1) => ({
   duration_seconds: '',
   weight: '',
   notes: '',
+  completion_status: 'pending',
+  pain_level: 1,
+  patient_notes: '',
+  therapist_comments: '',
   order_index: orderIndex,
 });
 
@@ -26,6 +30,7 @@ function normalizeNumber(value) {
 function buildEntry(entry) {
   const reps = normalizeNumber(entry.reps);
   const durationSeconds = normalizeNumber(entry.duration_seconds);
+  const painLevel = normalizeNumber(entry.pain_level);
 
   return {
     exercise: entry.exercise.trim(),
@@ -34,6 +39,10 @@ function buildEntry(entry) {
     duration_seconds: durationSeconds,
     weight: normalizeNumber(entry.weight),
     notes: entry.notes.trim(),
+    completion_status: entry.completion_status,
+    pain_level: painLevel == null ? 1 : Math.min(10, Math.max(1, painLevel)),
+    patient_notes: entry.patient_notes.trim(),
+    therapist_comments: entry.therapist_comments.trim(),
     order_index: Math.max(1, Number(entry.order_index) || 1),
   };
 }
@@ -50,11 +59,15 @@ function Metric({ label, value, accent }) {
 function App() {
   const [health, setHealth] = useState('Checking API...');
   const [healthTone, setHealthTone] = useState('neutral');
+  const [screen, setScreen] = useState('therapist');
   const [entries, setEntries] = useState([defaultEntry(1)]);
   const [lookupId, setLookupId] = useState('');
+  const [progressLookupId, setProgressLookupId] = useState('');
+  const [progressSummary, setProgressSummary] = useState([]);
+  const [progressJson, setProgressJson] = useState('{}');
   const [loading, setLoading] = useState(false);
   const [resultTitle, setResultTitle] = useState('Nothing loaded yet');
-  const [resultMeta, setResultMeta] = useState('Create or fetch a workout to inspect the response here.');
+  const [resultMeta, setResultMeta] = useState('Create or fetch a rehabilitation plan to inspect the response here.');
   const [resultBadge, setResultBadge] = useState('Idle');
   const [resultStats, setResultStats] = useState([]);
   const [resultJson, setResultJson] = useState('{}');
@@ -62,6 +75,14 @@ function App() {
   const entryCount = entries.length;
   const readyEntryCount = useMemo(
     () => entries.filter((entry) => entry.exercise.trim().length > 0).length,
+    [entries],
+  );
+
+  const therapistEntries = useMemo(
+    () => entries.map((entry, index) => ({
+      ...entry,
+      rowNumber: index + 1,
+    })),
     [entries],
   );
 
@@ -118,41 +139,62 @@ function App() {
 
   function showResponse(kind, payload) {
     const entryTotal = Array.isArray(payload.entries) ? payload.entries.length : 0;
-    setResultTitle(payload.title || `Workout ${payload.id}`);
-    setResultMeta(`${kind} workout ${payload.id} with ${entryTotal} entr${entryTotal === 1 ? 'y' : 'ies'}.`);
+    setResultTitle(payload.title || `Rehab plan ${payload.id}`);
+    setResultMeta(`${kind} rehabilitation plan ${payload.id} with ${entryTotal} entr${entryTotal === 1 ? 'y' : 'ies'}.`);
     setResultBadge(kind);
     setResultStats([
-      { label: 'Workout ID', value: payload.id ?? 'n/a' },
-      { label: 'Entries', value: entryTotal },
-      { label: 'Duration', value: payload.duration_minutes ? `${payload.duration_minutes} min` : 'n/a' },
-      { label: 'Calories', value: payload.calories_burned ?? 'n/a' },
+      { label: 'Plan ID', value: payload.id ?? 'n/a' },
+      { label: 'Exercises', value: entryTotal },
+      { label: 'Patient', value: payload.patient_name || 'n/a' },
+      { label: 'Status', value: payload.status || 'pending' },
     ]);
     setResultJson(compactJson(payload));
   }
 
-  async function handleCreateWorkout(event) {
+  function showProgress(payload) {
+    setProgressSummary([
+      { label: 'Completed', value: payload.completed_exercises ?? 0 },
+      { label: 'Skipped', value: payload.skipped_exercises ?? 0 },
+      { label: 'Pending', value: payload.pending_exercises ?? 0 },
+      { label: 'Avg pain', value: typeof payload.average_pain_level === 'number' ? payload.average_pain_level.toFixed(1) : 'n/a' },
+    ]);
+    setProgressJson(compactJson(payload));
+  }
+
+  async function handleCreateRehabPlan(event) {
     event.preventDefault();
     setLoading(true);
 
     try {
       const form = new FormData(event.currentTarget);
       const payload = {
+        patient_name: String(form.get('patient_name') || '').trim(),
+        therapist_name: String(form.get('therapist_name') || '').trim(),
         title: String(form.get('title') || '').trim(),
+        goal: String(form.get('goal') || '').trim(),
+        status: String(form.get('status') || 'active').trim() || 'active',
+        start_date: String(form.get('start_date') || '').trim(),
         description: String(form.get('description') || '').trim(),
-        duration_minutes: Number(form.get('duration_minutes') || 0),
-        calories_burned: Number(form.get('calories_burned') || 0),
         entries: entries.map(buildEntry).filter((entry) => entry.exercise.length > 0),
       };
 
+      if (!payload.patient_name) {
+        throw new Error('Patient name is required');
+      }
+
+      if (!payload.therapist_name) {
+        throw new Error('Therapist name is required');
+      }
+
       if (!payload.title) {
-        throw new Error('Title is required');
+        throw new Error('Plan title is required');
       }
 
       if (payload.entries.length === 0) {
-        throw new Error('Add at least one workout entry');
+        throw new Error('Add at least one rehabilitation exercise');
       }
 
-      const response = await fetch('/workouts', {
+      const response = await fetch('/rehab-plans', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -168,7 +210,7 @@ function App() {
       showResponse('Created', created);
       setLookupId(String(created.id));
       setHealthTone('good');
-      setHealth(`Saved workout ${created.id} successfully.`);
+      setHealth(`Saved rehabilitation plan ${created.id} successfully.`);
     } catch (error) {
       setResultBadge('Error');
       setResultTitle('Request failed');
@@ -176,21 +218,21 @@ function App() {
       setResultJson(compactJson({ error: error instanceof Error ? error.message : 'Unknown error' }));
       setResultStats([]);
       setHealthTone('bad');
-      setHealth('Workout save failed');
+      setHealth('Rehabilitation plan save failed');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleLookupWorkout(event) {
+  async function handleLookupRehabPlan(event) {
     event.preventDefault();
     const id = Number(lookupId);
 
     if (!Number.isFinite(id) || id <= 0) {
       setResultBadge('Error');
       setResultTitle('Invalid ID');
-      setResultMeta('Enter a positive workout ID.');
-      setResultJson(compactJson({ error: 'Invalid workout ID' }));
+      setResultMeta('Enter a positive rehabilitation plan ID.');
+      setResultJson(compactJson({ error: 'Invalid rehabilitation plan ID' }));
       setResultStats([]);
       return;
     }
@@ -198,15 +240,15 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(`/workouts/${id}`);
+      const response = await fetch(`/rehab-plans/${id}`);
       if (!response.ok) {
         throw new Error(await response.text());
       }
 
-      const workout = await response.json();
-      showResponse('Loaded', workout);
+      const rehabPlan = await response.json();
+      showResponse('Loaded', rehabPlan);
       setHealthTone('good');
-      setHealth(`Loaded workout ${workout.id} successfully.`);
+      setHealth(`Loaded rehabilitation plan ${rehabPlan.id} successfully.`);
     } catch (error) {
       setResultBadge('Error');
       setResultTitle('Lookup failed');
@@ -214,7 +256,38 @@ function App() {
       setResultJson(compactJson({ error: error instanceof Error ? error.message : 'Unknown error' }));
       setResultStats([]);
       setHealthTone('bad');
-      setHealth('Workout lookup failed');
+      setHealth('Rehabilitation plan lookup failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLoadProgress(event) {
+    event.preventDefault();
+    const id = Number(progressLookupId);
+
+    if (!Number.isFinite(id) || id <= 0) {
+      setProgressSummary([]);
+      setProgressJson(compactJson({ error: 'Invalid rehabilitation plan ID' }));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`/rehab-plans/${id}/progress`);
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const payload = await response.json();
+      showProgress(payload);
+      setHealthTone('good');
+      setHealth(`Loaded recovery history for plan ${payload.plan_id}`);
+    } catch (error) {
+      setProgressSummary([]);
+      setProgressJson(compactJson({ error: error instanceof Error ? error.message : 'Unknown error' }));
+      setHealthTone('bad');
+      setHealth('Recovery history lookup failed');
     } finally {
       setLoading(false);
     }
@@ -225,14 +298,19 @@ function App() {
       <div className="noise" />
       <header className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">femProject workout console</p>
-          <h1>Track workouts with a React dashboard built on your Go API.</h1>
+          <p className="eyebrow">femProject rehab console</p>
+          <h1>Track rehabilitation plans with a React dashboard built on your Go API.</h1>
           <p className="lede">
-            The UI stays focused on what your backend already does best: create workouts, fetch them by ID, and keep PostgreSQL as the source of truth.
+            The UI stays focused on what your backend already does best: create rehabilitation plans, fetch them by ID, and keep PostgreSQL as the source of truth.
           </p>
           <div className="hero-actions">
             <a className="button button-primary" href="/health" target="_blank" rel="noreferrer">Check health</a>
-            <a className="button button-secondary" href="#create-workout">Create workout</a>
+            <a className="button button-secondary" href="#create-rehab-plan">Create rehab plan</a>
+          </div>
+          <div className="screen-tabs" role="tablist" aria-label="Rehabilitation screens">
+            <button className={`screen-tab ${screen === 'therapist' ? 'active' : ''}`} type="button" onClick={() => setScreen('therapist')}>Therapist screen</button>
+            <button className={`screen-tab ${screen === 'patient' ? 'active' : ''}`} type="button" onClick={() => setScreen('patient')}>Patient screen</button>
+            <button className={`screen-tab ${screen === 'history' ? 'active' : ''}`} type="button" onClick={() => setScreen('history')}>Follow-up history</button>
           </div>
         </div>
 
@@ -251,46 +329,79 @@ function App() {
       </header>
 
       <main className="layout">
-        <section className="panel" id="create-workout">
+        <section className="panel" id="create-rehab-plan">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Workout builder</p>
-              <h2>Create a new workout</h2>
+              <p className="eyebrow">Rehabilitation builder</p>
+              <h2>Create a new rehab plan</h2>
             </div>
-            <p>Build a workout with one or more entries and save it straight to PostgreSQL.</p>
+            <p>Build a rehabilitation plan with one or more exercises and save it straight to PostgreSQL.</p>
           </div>
 
-          <form className="stack-form" onSubmit={handleCreateWorkout}>
+          {screen === 'therapist' && (
+            <div className="info-banner">
+              <strong>Therapist screen</strong>
+              <p>Create plans, assign exercises, and monitor session quality.</p>
+            </div>
+          )}
+
+          {screen === 'patient' && (
+            <div className="info-banner">
+              <strong>Patient screen</strong>
+              <p>Review your plan, record pain, and mark exercises completed or skipped.</p>
+            </div>
+          )}
+
+          <form className="stack-form" onSubmit={handleCreateRehabPlan}>
             <div className="form-grid two-up">
               <label>
-                <span>Title</span>
-                <input name="title" type="text" placeholder="Push Day" required />
+                <span>Patient name</span>
+                <input name="patient_name" type="text" placeholder="Ava Johnson" required />
               </label>
               <label>
-                <span>Duration minutes</span>
-                <input name="duration_minutes" type="number" min="1" step="1" placeholder="45" required />
+                <span>Therapist name</span>
+                <input name="therapist_name" type="text" placeholder="Dr. Lee" required />
+              </label>
+            </div>
+
+            <div className="form-grid two-up">
+              <label>
+                <span>Plan title</span>
+                <input name="title" type="text" placeholder="Post ACL Recovery" required />
+              </label>
+              <label>
+                <span>Start date</span>
+                <input name="start_date" type="date" />
               </label>
             </div>
 
             <label>
-              <span>Description</span>
-              <textarea name="description" rows="3" placeholder="Chest, shoulders, and triceps focused session" />
+              <span>Recovery goal</span>
+              <textarea name="goal" rows="3" placeholder="Restore knee mobility, reduce pain, and improve strength" />
             </label>
 
             <div className="form-grid two-up">
               <label>
-                <span>Calories burned</span>
-                <input name="calories_burned" type="number" min="0" step="1" placeholder="320" />
+                <span>Status</span>
+                <select name="status" defaultValue="active">
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="completed">Completed</option>
+                </select>
               </label>
               <div className="inline-note">
-                <strong>Entries</strong>
-                <p>Add at least one exercise. Use reps or duration_seconds for each row.</p>
+                <strong>Exercises</strong>
+                <p>Add at least one exercise. Track pain, completion status, and notes for each row.</p>
               </div>
             </div>
 
             <div className="entries">
-              {entries.map((entry, index) => (
+              {therapistEntries.map((entry, index) => (
                 <div className="entry-row" key={`${index}-${entry.order_index}`}>
+                  <div className="entry-header">
+                    <strong>Exercise {entry.rowNumber}</strong>
+                    <span className={`status-pill ${entry.completion_status}`}>{entry.completion_status}</span>
+                  </div>
                   <div className="entry-top">
                     <label>
                       <span>Exercise</span>
@@ -315,25 +426,41 @@ function App() {
                       <input value={entry.weight} onChange={(event) => updateEntry(index, 'weight', event.target.value)} type="number" min="0" step="0.5" placeholder="75.5" />
                     </label>
                     <label>
+                      <span>Pain level</span>
+                      <input value={entry.pain_level} onChange={(event) => updateEntry(index, 'pain_level', event.target.value)} type="number" min="1" max="10" step="1" placeholder="3" />
+                    </label>
+                    <label>
                       <span>Order</span>
                       <input value={entry.order_index} onChange={(event) => updateEntry(index, 'order_index', event.target.value)} type="number" min="1" step="1" placeholder="1" required />
                     </label>
                   </div>
                   <label>
-                    <span>Notes</span>
-                    <input value={entry.notes} onChange={(event) => updateEntry(index, 'notes', event.target.value)} type="text" placeholder="Keep control on the eccentric" />
+                    <span>Patient notes</span>
+                    <input value={entry.patient_notes} onChange={(event) => updateEntry(index, 'patient_notes', event.target.value)} type="text" placeholder="Felt mild discomfort but completed all reps" />
+                  </label>
+                  <label>
+                    <span>Therapist comments</span>
+                    <input value={entry.therapist_comments} onChange={(event) => updateEntry(index, 'therapist_comments', event.target.value)} type="text" placeholder="Progress is steady; continue as tolerated" />
+                  </label>
+                  <label>
+                    <span>Completion status</span>
+                    <select value={entry.completion_status} onChange={(event) => updateEntry(index, 'completion_status', event.target.value)}>
+                      <option value="pending">Pending</option>
+                      <option value="completed">Completed</option>
+                      <option value="skipped">Skipped</option>
+                    </select>
                   </label>
                   <button className="entry-remove" type="button" onClick={() => removeEntry(index)}>
-                    Remove entry
+                    Remove exercise
                   </button>
                 </div>
               ))}
             </div>
 
             <div className="form-actions">
-              <button className="button button-secondary" type="button" onClick={addEntry}>Add entry</button>
+              <button className="button button-secondary" type="button" onClick={addEntry}>Add exercise</button>
               <button className="button button-primary" type="submit" disabled={loading}>
-                {loading ? 'Working...' : 'Save workout'}
+                {loading ? 'Working...' : 'Save rehab plan'}
               </button>
             </div>
           </form>
@@ -342,15 +469,15 @@ function App() {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Workout lookup</p>
-              <h2>Fetch a saved workout</h2>
+              <p className="eyebrow">Rehab lookup</p>
+              <h2>Fetch a saved rehab plan</h2>
             </div>
-            <p>Use an ID from the save response to load the workout and its entries back from the database.</p>
+            <p>Use an ID from the save response to load the rehabilitation plan and its entries back from the database.</p>
           </div>
 
-          <form className="lookup-bar" onSubmit={handleLookupWorkout}>
-            <input value={lookupId} onChange={(event) => setLookupId(event.target.value)} name="workout_id" type="number" min="1" step="1" placeholder="Workout ID" required />
-            <button className="button button-primary" type="submit" disabled={loading}>Load workout</button>
+          <form className="lookup-bar" onSubmit={handleLookupRehabPlan}>
+            <input value={lookupId} onChange={(event) => setLookupId(event.target.value)} name="rehab_plan_id" type="number" min="1" step="1" placeholder="Plan ID" required />
+            <button className="button button-primary" type="submit" disabled={loading}>Load rehab plan</button>
           </form>
 
           <article className="result-card">
@@ -371,6 +498,32 @@ function App() {
               ))}
             </div>
             <pre className="result-json">{resultJson}</pre>
+
+            <div className="history-panel">
+              <div className="panel-heading compact">
+                <div>
+                  <p className="eyebrow">Follow-up history</p>
+                  <h2>Load recovery timeline</h2>
+                </div>
+                <p>Pull the summary of completed, skipped, and pending exercises for a plan.</p>
+              </div>
+
+              <form className="lookup-bar" onSubmit={handleLoadProgress}>
+                <input value={progressLookupId} onChange={(event) => setProgressLookupId(event.target.value)} name="progress_plan_id" type="number" min="1" step="1" placeholder="Plan ID" required />
+                <button className="button button-secondary" type="submit" disabled={loading}>Load history</button>
+              </form>
+
+              <div className="result-stats history-stats">
+                {progressSummary.map((stat) => (
+                  <div key={stat.label} className="stat-card">
+                    <span>{stat.label}</span>
+                    <strong>{stat.value}</strong>
+                  </div>
+                ))}
+              </div>
+
+              <pre className="result-json history-json">{progressJson}</pre>
+            </div>
           </article>
         </section>
       </main>
