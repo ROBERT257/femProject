@@ -7,7 +7,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/health': 'http://localhost:8080',
-      '/workouts': 'http://localhost:8080'
+      '/rehab-plans': 'http://localhost:8080',
+      '/rehab-exercises': 'http://localhost:8080'
     }
   }
 });

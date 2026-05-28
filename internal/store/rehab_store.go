@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"time"
 )
 
 // RehabPlan represents a rehabilitation plan.
@@ -15,6 +16,8 @@ type RehabPlan struct {
 	Status        string          `json:"status"`
 	StartDate     string          `json:"start_date"`
 	Description   string          `json:"description"`
+	EntryCount    int             `json:"entry_count,omitempty"`
+	AveragePain   float64         `json:"average_pain,omitempty"`
 	Entries       []RehabExercise `json:"entries"`
 }
 
@@ -38,6 +41,7 @@ type RehabExercise struct {
 type RehabStore interface {
 	CreateRehabPlan(*RehabPlan) (*RehabPlan, error)
 	GetRehabPlanByID(int64) (*RehabPlan, error)
+	ListRehabPlans() ([]RehabPlan, error)
 	UpdateRehabPlan(*RehabPlan) error
 	DeleteRehabPlan(int64) error
 	UpdateRehabExercise(*RehabExercise) error
@@ -62,10 +66,17 @@ func (pg *PostgresRehabStore) CreateRehabPlan(rehabPlan *RehabPlan) (*RehabPlan,
 	}
 	defer tx.Rollback()
 
-	query := `INSERT INTO workouts (patient_name, therapist_name, title, goal, status, start_date, description)
-			  VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::date, $7) RETURNING id`
+	// Ensure legacy required columns are provided (duration_minutes, calories_burned)
+	// Provide start_date explicitly (use today's date when not provided) to avoid NULL constraint issues.
+	startDate := rehabPlan.StartDate
+	if startDate == "" {
+		startDate = time.Now().Format("2006-01-02")
+	}
+
+	query := `INSERT INTO workouts (patient_name, therapist_name, title, goal, status, start_date, description, duration_minutes, calories_burned)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
 	var rehabPlanID int
-	err = tx.QueryRow(query, rehabPlan.PatientName, rehabPlan.TherapistName, rehabPlan.Title, rehabPlan.Goal, rehabPlan.Status, rehabPlan.StartDate, rehabPlan.Description).Scan(&rehabPlanID)
+	err = tx.QueryRow(query, rehabPlan.PatientName, rehabPlan.TherapistName, rehabPlan.Title, rehabPlan.Goal, rehabPlan.Status, startDate, rehabPlan.Description, 0, 0).Scan(&rehabPlanID)
 	if err != nil {
 		return nil, err
 	}
@@ -238,4 +249,61 @@ func (pg *PostgresRehabStore) DeleteRehabExerciseByID(entryID int64) error {
 	}
 
 	return nil
+}
+
+// ListRehabPlans returns a list of rehabilitation plans (without exercises) for overview screens.
+func (pg *PostgresRehabStore) ListRehabPlans() ([]RehabPlan, error) {
+	rows, err := pg.db.Query(`
+		SELECT
+			w.id,
+			w.patient_name,
+			w.therapist_name,
+			w.title,
+			w.goal,
+			w.status,
+			w.start_date,
+			w.description,
+			COUNT(e.id) AS entry_count,
+			COALESCE(AVG(e.pain_level), 0) AS average_pain
+		FROM workouts w
+		LEFT JOIN workout_entries e ON e.workout_id = w.id
+		GROUP BY w.id, w.patient_name, w.therapist_name, w.title, w.goal, w.status, w.start_date, w.description
+		ORDER BY w.id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var plans []RehabPlan
+	for rows.Next() {
+		var p RehabPlan
+		var patientName, therapistName, title, goal, status, startDate, description sql.NullString
+		if err := rows.Scan(&p.ID, &patientName, &therapistName, &title, &goal, &status, &startDate, &description, &p.EntryCount, &p.AveragePain); err != nil {
+			return nil, err
+		}
+		if patientName.Valid {
+			p.PatientName = patientName.String
+		}
+		if therapistName.Valid {
+			p.TherapistName = therapistName.String
+		}
+		if title.Valid {
+			p.Title = title.String
+		}
+		if goal.Valid {
+			p.Goal = goal.String
+		}
+		if status.Valid {
+			p.Status = status.String
+		}
+		if startDate.Valid {
+			p.StartDate = startDate.String
+		}
+		if description.Valid {
+			p.Description = description.String
+		}
+		plans = append(plans, p)
+	}
+
+	return plans, nil
 }

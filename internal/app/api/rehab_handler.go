@@ -130,6 +130,23 @@ func (wh *RehabHandler) HandleDeleteRehabExerciseByID(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GET /rehab-plans
+func (wh *RehabHandler) HandleListRehabPlans(w http.ResponseWriter, r *http.Request) {
+	plans, err := wh.rehabStore.ListRehabPlans()
+	if err != nil {
+		log.Println("❌ Failed to list rehabilitation plans:", err)
+		http.Error(w, "Failed to list rehabilitation plans", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(plans); err != nil {
+		log.Println("❌ Failed to encode plans:", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
 // GET /rehab-plans/{id}/progress
 func (wh *RehabHandler) HandleGetRehabProgress(w http.ResponseWriter, r *http.Request) {
 	rehabPlanIDParam := chi.URLParam(r, "id")
@@ -210,4 +227,72 @@ func (wh *RehabHandler) HandleGetRehabProgress(w http.ResponseWriter, r *http.Re
 		http.Error(w, "Failed to return rehabilitation progress", http.StatusInternalServerError)
 		return
 	}
+}
+
+// PATCH /rehab-plans/{id}
+func (wh *RehabHandler) HandleUpdateRehabPlan(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	if idStr == "" {
+		http.Error(w, "Rehabilitation plan ID required", http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid rehabilitation plan ID", http.StatusBadRequest)
+		return
+	}
+
+	var payload store.RehabPlan
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	payload.ID = int(id)
+	if err := wh.rehabStore.UpdateRehabPlan(&payload); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Rehabilitation plan not found", http.StatusNotFound)
+		} else {
+			log.Println("❌ Failed to update plan:", err)
+			http.Error(w, "Failed to update rehabilitation plan", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PATCH /rehab-exercises/{entryID}
+func (wh *RehabHandler) HandleUpdateRehabExercise(w http.ResponseWriter, r *http.Request) {
+	entryIDStr := chi.URLParam(r, "entryID")
+	if entryIDStr == "" {
+		http.Error(w, "Exercise ID required", http.StatusBadRequest)
+		return
+	}
+
+	entryID, err := strconv.ParseInt(entryIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid exercise ID", http.StatusBadRequest)
+		return
+	}
+
+	var entry store.RehabExercise
+	if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	entry.ID = int(entryID)
+	if err := wh.rehabStore.UpdateRehabExercise(&entry); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Rehabilitation exercise not found", http.StatusNotFound)
+		} else {
+			log.Println("❌ Failed to update exercise:", err)
+			http.Error(w, "Failed to update exercise", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

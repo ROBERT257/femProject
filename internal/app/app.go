@@ -13,6 +13,7 @@ import (
 
 type Application struct {
 	Logger         *log.Logger
+	AccountHandler *api.AccountHandler
 	RehabHandler   *api.RehabHandler
 	Healthcheck    http.HandlerFunc
 	DB             *sql.DB
@@ -37,13 +38,17 @@ func NewApplication() (*Application, error) {
 
 	// 4. Initialize the rehab store using the correct constructor
 	rehabStore := store.NewRehabStore(pgDB)
+	accountStore := store.NewAccountStore(pgDB)
+	emailSender := api.NewSMTPEmailSenderFromEnv()
 
 	// 5. Create the RehabHandler
 	rehabHandler := api.NewRehabHandler(rehabStore)
+	accountHandler := api.NewAccountHandler(accountStore, emailSender)
 
 	// 6. Bundle everything into the Application struct
 	app := &Application{
 		Logger:         logger,
+		AccountHandler: accountHandler,
 		RehabHandler:   rehabHandler,
 		Healthcheck:    healthHandler,
 		DB:             pgDB,
