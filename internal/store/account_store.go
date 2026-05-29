@@ -1,15 +1,22 @@
 package store
 
 import (
+	"errors"
 	"crypto/rand"
 	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgconn"
 	"golang.org/x/crypto/bcrypt"
 )
 
+var (
+	ErrAccountEmailExists = errors.New("email already exists")
+	ErrAccountLoginExists = errors.New("login id already exists")
+	ErrAccountRegNoExists = errors.New("registration number already exists")
+)
 type Account struct {
 	ID                 int64   `json:"id"`
 	Role               string  `json:"role"`
@@ -96,6 +103,27 @@ func hashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
+func translateAccountInsertError(err error) error {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return err
+	}
+
+	if pgErr.Code != "23505" {
+		return err
+	}
+
+	switch pgErr.ConstraintName {
+	case "accounts_email_key":
+		return ErrAccountEmailExists
+	case "accounts_login_id_key":
+		return ErrAccountLoginExists
+	case "accounts_reg_no_key":
+		return ErrAccountRegNoExists
+	default:
+		return err
+	}
+}
 func verifyPassword(hash, password string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 }
@@ -279,7 +307,7 @@ func (pg *PostgresAccountStore) CreateTherapist(fullName, email string) (*Accoun
 		&account.UpdatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, translateAccountInsertError(err)
 	}
 
 	account.Password = password
@@ -403,7 +431,7 @@ func (pg *PostgresAccountStore) CreatePatient(therapistLoginID, fullName, email 
 		&account.UpdatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, translateAccountInsertError(err)
 	}
 
 	account.Password = patientPassword

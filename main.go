@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/ROBERT257/femProject/internal/app"
@@ -11,8 +13,15 @@ import (
 )
 
 func main() {
+	defaultPort := 8080
+	if value := os.Getenv("SERVER_PORT"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			defaultPort = parsed
+		}
+	}
+
 	var port int
-	flag.IntVar(&port, "port", 8080, "go backend server port")
+	flag.IntVar(&port, "port", defaultPort, "go backend server port")
 	flag.Parse()
 
 	app, err := app.NewApplication()
@@ -29,7 +38,7 @@ func main() {
 		Handler:      r,
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: 5 * time.Minute,
 	}
 
 	app.Logger.Printf("✅ We are running our app on port %d", port)

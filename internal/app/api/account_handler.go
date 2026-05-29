@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -83,7 +84,11 @@ func (h *AccountHandler) HandleCreateTherapist(w http.ResponseWriter, r *http.Re
 
 	account, err := h.accountStore.CreateTherapist(payload.FullName, payload.Email)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		status := http.StatusBadRequest
+		if errors.Is(err, store.ErrAccountEmailExists) || errors.Is(err, store.ErrAccountLoginExists) || errors.Is(err, store.ErrAccountRegNoExists) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 
@@ -183,7 +188,11 @@ func (h *AccountHandler) HandleCreatePatient(w http.ResponseWriter, r *http.Requ
 
 	account, err := h.accountStore.CreatePatient(therapistID, payload.FullName, payload.Email)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		status := http.StatusBadRequest
+		if errors.Is(err, store.ErrAccountEmailExists) || errors.Is(err, store.ErrAccountLoginExists) || errors.Is(err, store.ErrAccountRegNoExists) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 

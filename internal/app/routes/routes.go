@@ -4,11 +4,13 @@ import (
 	"net/http"
 
 	appPkg "github.com/ROBERT257/femProject/internal/app"
+	appmiddleware "github.com/ROBERT257/femProject/internal/middleware"
 	"github.com/go-chi/chi"
 )
 
 func SetupRoutes(app *appPkg.Application) *chi.Mux {
 	r := chi.NewRouter()
+	r.Use(appmiddleware.Recovery)
 	r.Use(corsMiddleware)
 
 	r.Get("/health", app.Healthcheck)
@@ -18,6 +20,10 @@ func SetupRoutes(app *appPkg.Application) *chi.Mux {
 	r.Post("/therapists/{therapistID}/password-reset", app.AccountHandler.HandleResetTherapistPassword)
 	r.Post("/therapists/{therapistID}/patients", app.AccountHandler.HandleCreatePatient)
 	r.Get("/therapists/{therapistID}/patients", app.AccountHandler.HandleListPatientsByTherapist)
+	r.Post("/api/ai/chat", app.AIHandler.HandleChat)
+	r.Post("/api/recommendations/generate", app.RecommendationHandler.HandleGenerate)
+	r.Post("/api/wearables/sync", app.WearableHandler.HandleSync)
+	r.Get("/api/wearables/{userId}", app.WearableHandler.HandleList)
 
 	// Rehabilitation plan routes
 	// Rehabilitation plan routes
