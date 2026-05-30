@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ExerciseRow from './ExerciseRow';
+import {
+  deleteRehabExercise,
+  deleteRehabPlan,
+  getRehabPlanById,
+  updateRehabExercise,
+  updateRehabPlan,
+} from '../lib/api';
 
 export default function PlanEditor({ planId, onUpdated, onDeleted, showToast }) {
   const [plan, setPlan] = useState(null);
@@ -19,18 +26,13 @@ export default function PlanEditor({ planId, onUpdated, onDeleted, showToast }) 
       setLoading(true);
       setProgress(null);
       try {
-        const [planResponse, progressResponse] = await Promise.all([
-          fetch(`/rehab-plans/${planId}`),
-          fetch(`/rehab-plans/${planId}/progress`),
+        const [data, progressResponse] = await Promise.all([
+          getRehabPlanById(planId),
+          fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8080'}/rehab-plans/${planId}/progress`),
         ]);
 
-        if (!planResponse.ok) throw new Error(await planResponse.text());
         if (!progressResponse.ok) throw new Error(await progressResponse.text());
-
-        const [data, progressData] = await Promise.all([
-          planResponse.json(),
-          progressResponse.json(),
-        ]);
+        const progressData = await progressResponse.json();
         if (!active) return;
         setPlan(data);
         setProgress(progressData);
@@ -105,12 +107,7 @@ export default function PlanEditor({ planId, onUpdated, onDeleted, showToast }) 
 
   async function savePlan() {
     try {
-      const res = await fetch(`/rehab-plans/${plan.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(plan),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await updateRehabPlan(plan.id, plan);
       onUpdated && onUpdated();
       showToast && showToast('Plan saved successfully', 'success');
     } catch (e) {
@@ -121,12 +118,7 @@ export default function PlanEditor({ planId, onUpdated, onDeleted, showToast }) 
   // Optimistic update: apply change locally, attempt server update, revert on failure
   async function updateExerciseOnServer(entry, previous) {
     try {
-      const res = await fetch(`/rehab-exercises/${entry.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await updateRehabExercise(entry.id, entry);
       onUpdated && onUpdated();
       showToast && showToast('Exercise saved successfully', 'success');
     } catch (e) {
@@ -139,10 +131,8 @@ export default function PlanEditor({ planId, onUpdated, onDeleted, showToast }) 
   async function deleteExercise(id) {
     if (!confirm('Delete this exercise?')) return;
     try {
-      const res = await fetch(`/rehab-exercises/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(await res.text());
-      // reload plan
-      const refreshed = await (await fetch(`/rehab-plans/${plan.id}`)).json();
+      await deleteRehabExercise(id);
+      const refreshed = await getRehabPlanById(plan.id);
       setPlan(refreshed);
       onUpdated && onUpdated();
       showToast && showToast('Exercise deleted successfully', 'success');
@@ -154,8 +144,7 @@ export default function PlanEditor({ planId, onUpdated, onDeleted, showToast }) 
   async function deletePlan() {
     if (!confirm('Delete this plan and all exercises?')) return;
     try {
-      const res = await fetch(`/rehab-plans/${plan.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(await res.text());
+      await deleteRehabPlan(plan.id);
       onDeleted && onDeleted(plan.id);
     } catch (e) {
       showToast && showToast('Plan delete failed', 'error');

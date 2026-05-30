@@ -6,6 +6,7 @@ require (
 	github.com/go-chi/chi v1.5.5
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/pressly/goose/v3 v3.24.3
+	golang.org/x/oauth2 v0.27.0
 )
 
 require (

@@ -53,21 +53,21 @@ func NewApplication() (*Application, error) {
 	aiStore := store.NewAIConversationStore(pgDB)
 	aiAnalyticsStore := store.NewAIAnalyticsStore(pgDB)
 	wearableStore := store.NewWearableStore(pgDB)
-	recommendationEngine := &recommendation.Engine{}
-	recommendationService := recommendation.NewService(recommendationEngine)
-	recommendationHandler := recommendation.NewHandler(recommendationService, appLogger)
 	googleFitClient := &wearable.GoogleFitClient{
 		ClientID: getenvDefault("GOOGLE_FIT_CLIENT_ID", ""),
 		Secret:   getenvDefault("GOOGLE_FIT_CLIENT_SECRET", ""),
 	}
 	wearableService := wearable.NewService(wearableStore, googleFitClient)
 	wearableHandler := wearable.NewHandler(wearableService, appLogger)
+	recommendationEngine := &recommendation.Engine{}
+	recommendationService := recommendation.NewService(recommendationEngine, wearableService)
+	recommendationHandler := recommendation.NewHandler(recommendationService, appLogger)
 	aiClient := ai.NewOllamaClient(
 		getenvDefault("OLLAMA_URL", "http://localhost:11434"),
 		getenvDefault("OLLAMA_MODEL", "phi3"),
 		4*time.Minute,
 	)
-	aiService := ai.NewService(aiClient, aiStore, aiAnalyticsStore, aiLogger)
+	aiService := ai.NewService(aiClient, aiStore, aiAnalyticsStore, aiLogger, wearableService)
 	aiHandler := ai.NewHandler(aiService, aiLogger)
 	emailSender := api.NewSMTPEmailSenderFromEnv()
 

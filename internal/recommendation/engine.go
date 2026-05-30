@@ -9,6 +9,7 @@ type Signals struct {
 	WorkoutCompleted *bool `json:"workout_completed,omitempty"`
 	FatigueLevel    int   `json:"fatigue_level"`
 	HeartRate       int   `json:"heart_rate"`
+	UserID          int64 `json:"user_id,omitempty"`
 }
 
 // Engine evaluates patient signals and produces recommendations.

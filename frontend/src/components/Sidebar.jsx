@@ -1,9 +1,10 @@
-import { LayoutDashboard, MessageSquareHeart, ActivitySquare, LogOut } from 'lucide-react';
+import { LayoutDashboard, MessageSquareHeart, ActivitySquare, LogOut, Watch } from 'lucide-react';
 
 const navItems = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'assistant', label: 'Rehab Assistant', icon: MessageSquareHeart },
   { key: 'analytics', label: 'Analytics', icon: ActivitySquare },
+  { key: 'wearables', label: 'Wearables', icon: Watch },
 ];
 
 export default function Sidebar({ active = 'dashboard', onSelect, onLogout }) {

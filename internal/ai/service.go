@@ -7,6 +7,9 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/ROBERT257/femProject/internal/wearable"
+	"github.com/ROBERT257/femProject/internal/store"
 )
 
 // ConversationStore persists AI conversations.
@@ -16,18 +19,7 @@ type ConversationStore interface {
 
 // AnalyticsStore persists AI request telemetry.
 type AnalyticsStore interface {
-	SaveRequestAnalytics(ctx context.Context, input RequestAnalytics) error
-}
-
-// RequestAnalytics stores AI prompt telemetry.
-type RequestAnalytics struct {
-	UserID               int64
-	RequestType          string
-	ModelUsed            string
-	PromptDuration       time.Duration
-	TokenCount           int
-	PromptTokenCount     int
-	CompletionTokenCount int
+	SaveRequestAnalytics(ctx context.Context, input store.RequestAnalytics) error
 }
 
 // Service coordinates prompt creation, model calls, and persistence.
@@ -36,14 +28,20 @@ type Service struct {
 	store     ConversationStore
 	analytics AnalyticsStore
 	logger    *slog.Logger
+	wearable  WearableProvider
 }
 
-// NewService creates the AI service.
-func NewService(client *OllamaClient, store ConversationStore, analytics AnalyticsStore, logger *slog.Logger) *Service {
+// WearableProvider returns compact wearable metrics for a user.
+type WearableProvider interface {
+	GetLatestMetrics(ctx context.Context, userID int64) (wearable.Metrics, error)
+}
+
+// NewService creates the AI service. The wearable provider is optional (pass nil to skip wearable context).
+func NewService(client *OllamaClient, store ConversationStore, analytics AnalyticsStore, logger *slog.Logger, wearableProvider WearableProvider) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Service{client: client, store: store, analytics: analytics, logger: logger}
+	return &Service{client: client, store: store, analytics: analytics, logger: logger, wearable: wearableProvider}
 }
 
 // Chat generates a rehab-safe response and persists the exchange.
@@ -53,7 +51,34 @@ func (s *Service) Chat(ctx context.Context, userID int64, message string) (*Chat
 		return nil, fmt.Errorf("message is required")
 	}
 
-	prompt := BuildRehabPrompt(message)
+	// Build base prompt and optionally append wearable metrics if available
+	prompt := ""
+	if s.wearable != nil {
+		if metrics, err := s.wearable.GetLatestMetrics(ctx, userID); err == nil {
+			// Only include wearable context if any metric present
+			if metrics.Steps > 0 || metrics.HeartRate != nil || metrics.SleepHours != nil || metrics.Calories != nil {
+				wearableCtx := "User wearable metrics:\n"
+				wearableCtx += fmt.Sprintf("- Steps: %d\n", metrics.Steps)
+				if metrics.SleepHours != nil {
+					wearableCtx += fmt.Sprintf("- Sleep: %.1f hours\n", *metrics.SleepHours)
+				}
+				if metrics.HeartRate != nil {
+					wearableCtx += fmt.Sprintf("- Resting HR: %d\n", *metrics.HeartRate)
+				}
+				if metrics.Calories != nil {
+					wearableCtx += fmt.Sprintf("- Calories: %d\n", *metrics.Calories)
+				}
+				prompt = fmt.Sprintf("%s\n\n%s\nUser message:\n%s", systemRehabPrompt, wearableCtx, message)
+			} else {
+				prompt = BuildRehabPrompt(message)
+			}
+		} else {
+			// On error fetching wearable metrics, proceed without them
+			prompt = BuildRehabPrompt(message)
+		}
+	} else {
+		prompt = BuildRehabPrompt(message)
+	}
 	startedAt := time.Now()
 	generation, err := s.client.Generate(ctx, prompt)
 	if err != nil {
@@ -83,11 +108,11 @@ func (s *Service) Chat(ctx context.Context, userID int64, message string) (*Chat
 	}
 
 	if s.analytics != nil {
-		_ = s.analytics.SaveRequestAnalytics(ctx, RequestAnalytics{
+		_ = s.analytics.SaveRequestAnalytics(ctx, store.RequestAnalytics{
 			UserID:               userID,
 			RequestType:          "ai_chat",
 			ModelUsed:            generation.Model,
-			PromptDuration:       time.Since(startedAt),
+			PromptDuration:       time.Since(startedAt).Milliseconds(),
 			TokenCount:           generation.TotalTokens,
 			PromptTokenCount:     generation.PromptTokens,
 			CompletionTokenCount: generation.CompletionTokens,

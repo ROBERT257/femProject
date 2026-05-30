@@ -6,6 +6,7 @@ import RecoveryCard from '../components/RecoveryCard';
 import RecommendationCard from '../components/RecommendationCard';
 import AnalyticsCharts from '../components/AnalyticsCharts';
 import WearableMetricsPlaceholder from '../components/WearableMetricsPlaceholder';
+import GoogleFitConnect from './GoogleFitConnect';
 import { generateRecommendations } from '../api/recommendations';
 import { getAnalyticsSnapshot } from '../api/analytics';
 
@@ -83,6 +84,25 @@ export default function Dashboard({ session, onLogout }) {
     setScore(82);
   };
 
+  if (activeTab === 'wearables') {
+    return <GoogleFitConnect userId={session?.id || 1} onBack={() => setActiveTab('dashboard')} />;
+  }
+
+  const titleByTab = {
+    dashboard: 'AI Rehab Dashboard',
+    assistant: 'Rehab Assistant',
+    analytics: 'Recovery Analytics',
+  };
+
+  const subtitleByTab = {
+    dashboard: 'Personalized rehab intelligence powered by your backend',
+    assistant: 'Chat with the AI assistant and review recovery guidance',
+    analytics: 'Track recovery trends, adherence, and wearable context',
+  };
+
+  const isAssistantTab = activeTab === 'assistant';
+  const isAnalyticsTab = activeTab === 'analytics';
+
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
       <div className="mx-auto flex max-w-[1480px]">
@@ -91,28 +111,60 @@ export default function Dashboard({ session, onLogout }) {
         <main className="w-full p-4 md:p-8">
           <Navbar
             userName={session?.fullName || 'Patient'}
-            title="AI Rehab Dashboard"
-            subtitle="Personalized rehab intelligence powered by your backend"
+            title={titleByTab[activeTab] || titleByTab.dashboard}
+            subtitle={subtitleByTab[activeTab] || subtitleByTab.dashboard}
           />
 
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-            <div className="xl:col-span-8">
-              <RehabAssistant userId={session?.id || 1} onResponse={handleAIResponse} />
-            </div>
-            <div className="space-y-5 xl:col-span-4">
-              <RecoveryCard score={score} status={recoveryStatus} />
-              <RecommendationCard recommendations={recommendations} />
-            </div>
-          </div>
+          {activeTab === 'dashboard' && (
+            <>
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+                <div className="xl:col-span-8">
+                  <RehabAssistant userId={session?.id || 1} onResponse={handleAIResponse} />
+                </div>
+                <div className="space-y-5 xl:col-span-4">
+                  <RecoveryCard score={score} status={recoveryStatus} />
+                  <RecommendationCard recommendations={recommendations} />
+                </div>
+              </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-12">
-            <div className="xl:col-span-8">
-              <AnalyticsCharts data={analyticsData} />
+              <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-12">
+                <div className="xl:col-span-8">
+                  <AnalyticsCharts data={analyticsData} />
+                </div>
+                <div className="xl:col-span-4">
+                  <WearableMetricsPlaceholder />
+                </div>
+              </div>
+            </>
+          )}
+
+          {isAssistantTab && (
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+              <div className="xl:col-span-8">
+                <RehabAssistant userId={session?.id || 1} onResponse={handleAIResponse} />
+              </div>
+              <div className="space-y-5 xl:col-span-4">
+                <RecoveryCard score={score} status={recoveryStatus} />
+                <RecommendationCard recommendations={recommendations} />
+                <WearableMetricsPlaceholder />
+              </div>
             </div>
-            <div className="xl:col-span-4">
+          )}
+
+          {isAnalyticsTab && (
+            <div className="space-y-6">
+              <AnalyticsCharts data={analyticsData} />
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+                <div className="xl:col-span-4">
+                  <RecoveryCard score={score} status={recoveryStatus} />
+                </div>
+                <div className="xl:col-span-8">
+                  <RecommendationCard recommendations={recommendations} />
+                </div>
+              </div>
               <WearableMetricsPlaceholder />
             </div>
-          </div>
+          )}
         </main>
       </div>
     </div>

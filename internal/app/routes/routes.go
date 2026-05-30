@@ -24,6 +24,10 @@ func SetupRoutes(app *appPkg.Application) *chi.Mux {
 	r.Post("/api/recommendations/generate", app.RecommendationHandler.HandleGenerate)
 	r.Post("/api/wearables/sync", app.WearableHandler.HandleSync)
 	r.Get("/api/wearables/{userId}", app.WearableHandler.HandleList)
+    // Google Fit OAuth endpoints
+    r.Get("/api/wearables/google/login", app.WearableHandler.HandleGoogleLogin)
+    r.Get("/api/wearables/google/callback", app.WearableHandler.HandleGoogleCallback)
+	r.Post("/api/wearables/google/sync", app.WearableHandler.HandleGoogleSync)
 
 	// Rehabilitation plan routes
 	// Rehabilitation plan routes

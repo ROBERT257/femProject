@@ -101,3 +101,33 @@ export function listPatientsByTherapist(therapistID) {
 export function listRehabPlans() {
   return request('/rehab-plans');
 }
+
+export function getRehabPlanById(planId) {
+  return request(`/rehab-plans/${encodeURIComponent(planId)}`);
+}
+
+export function updateRehabPlan(planId, payload) {
+  return request(`/rehab-plans/${encodeURIComponent(planId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteRehabPlan(planId) {
+  return request(`/rehab-plans/${encodeURIComponent(planId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function updateRehabExercise(entryId, payload) {
+  return request(`/rehab-exercises/${encodeURIComponent(entryId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteRehabExercise(entryId) {
+  return request(`/rehab-exercises/${encodeURIComponent(entryId)}`, {
+    method: 'DELETE',
+  });
+}
