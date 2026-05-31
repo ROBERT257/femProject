@@ -242,6 +242,7 @@ function App() {
         <AdminScreen
           accounts={accounts}
           onCreateTherapist={handleCreateTherapist}
+          onCreatePatient={handleCreatePatient}
           onBackToRoles={() => setScreen('role')}
           notice={notice}
         />
