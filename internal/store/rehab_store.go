@@ -9,6 +9,7 @@ import (
 // RehabPlan represents a rehabilitation plan.
 type RehabPlan struct {
 	ID            int             `json:"id"`
+	PatientID     int64           `json:"patient_id,omitempty"`
 	PatientName   string          `json:"patient_name"`
 	TherapistName string          `json:"therapist_name"`
 	Title         string          `json:"title"`
@@ -33,6 +34,7 @@ type RehabExercise struct {
 	OrderIndex        int      `json:"order_index"`
 	CompletionStatus  string   `json:"completion_status"`
 	PainLevel         int      `json:"pain_level"`
+	FatigueLevel      int      `json:"fatigue_level"`
 	PatientNotes      string   `json:"patient_notes"`
 	TherapistComments string   `json:"therapist_comments"`
 }
@@ -46,6 +48,15 @@ type RehabStore interface {
 	DeleteRehabPlan(int64) error
 	UpdateRehabExercise(*RehabExercise) error
 	DeleteRehabExerciseByID(int64) error
+	AnalyticsSnapshot(days int, patientID *int64) ([]AnalyticsPoint, error)
+}
+
+// AnalyticsPoint contains aggregated metrics for a single day
+type AnalyticsPoint struct {
+	Day       string  `json:"day"`
+	Pain      float64 `json:"pain"`
+	Fatigue   float64 `json:"fatigue"`
+	Adherence int     `json:"adherence"`
 }
 
 // PostgresRehabStore implements the RehabStore interface using PostgreSQL.
@@ -73,19 +84,30 @@ func (pg *PostgresRehabStore) CreateRehabPlan(rehabPlan *RehabPlan) (*RehabPlan,
 		startDate = time.Now().Format("2006-01-02")
 	}
 
-	query := `INSERT INTO workouts (patient_name, therapist_name, title, goal, status, start_date, description, duration_minutes, calories_burned)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
+	query := `INSERT INTO workouts (patient_id, patient_name, therapist_name, title, goal, status, start_date, description, duration_minutes, calories_burned)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`
 	var rehabPlanID int
-	err = tx.QueryRow(query, rehabPlan.PatientName, rehabPlan.TherapistName, rehabPlan.Title, rehabPlan.Goal, rehabPlan.Status, startDate, rehabPlan.Description, 0, 0).Scan(&rehabPlanID)
+	var patientID sql.NullInt64
+	if rehabPlan.PatientID != 0 {
+		patientID = sql.NullInt64{Int64: rehabPlan.PatientID, Valid: true}
+	}
+	err = tx.QueryRow(query, patientID, rehabPlan.PatientName, rehabPlan.TherapistName, rehabPlan.Title, rehabPlan.Goal, rehabPlan.Status, startDate, rehabPlan.Description, 0, 0).Scan(&rehabPlanID)
 	if err != nil {
 		return nil, err
 	}
 
 	for i, entry := range rehabPlan.Entries {
-		query = `INSERT INTO workout_entries (workout_id, exercise_name, sets, reps, duration_seconds, weight, notes, order_index, completion_status, pain_level, patient_notes, therapist_comments)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		// Ensure DB constraint for workout_entries: either reps or duration_seconds must be set (and not both).
+		if entry.Reps == nil && entry.DurationSeconds == nil {
+			// default to a reasonable reps value when none provided
+			defaultReps := 10
+			entry.Reps = &defaultReps
+		}
+
+		query = `INSERT INTO workout_entries (workout_id, exercise_name, sets, reps, duration_seconds, weight, notes, order_index, completion_status, pain_level, fatigue_level, patient_notes, therapist_comments)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 				 RETURNING id`
-		err = tx.QueryRow(query, rehabPlanID, entry.Exercise, entry.Sets, entry.Reps, entry.DurationSeconds, entry.Weight, entry.Notes, entry.OrderIndex, entry.CompletionStatus, entry.PainLevel, entry.PatientNotes, entry.TherapistComments).Scan(&entry.ID)
+		err = tx.QueryRow(query, rehabPlanID, entry.Exercise, entry.Sets, entry.Reps, entry.DurationSeconds, entry.Weight, entry.Notes, entry.OrderIndex, entry.CompletionStatus, entry.PainLevel, entry.FatigueLevel, entry.PatientNotes, entry.TherapistComments).Scan(&entry.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -103,17 +125,21 @@ func (pg *PostgresRehabStore) CreateRehabPlan(rehabPlan *RehabPlan) (*RehabPlan,
 // GetRehabPlanByID fetches a rehab plan and its exercises by ID.
 func (pg *PostgresRehabStore) GetRehabPlanByID(rehabPlanID int64) (*RehabPlan, error) {
 	rehabPlan := &RehabPlan{}
-	query := `SELECT id, patient_name, therapist_name, title, goal, status, start_date, description
-              FROM workouts WHERE id = $1`
-	err := pg.db.QueryRow(query, rehabPlanID).Scan(&rehabPlan.ID, &rehabPlan.PatientName, &rehabPlan.TherapistName, &rehabPlan.Title, &rehabPlan.Goal, &rehabPlan.Status, &rehabPlan.StartDate, &rehabPlan.Description)
+	query := `SELECT id, patient_id, patient_name, therapist_name, title, goal, status, start_date, description
+			  FROM workouts WHERE id = $1`
+	var patientID sql.NullInt64
+	err := pg.db.QueryRow(query, rehabPlanID).Scan(&rehabPlan.ID, &patientID, &rehabPlan.PatientName, &rehabPlan.TherapistName, &rehabPlan.Title, &rehabPlan.Goal, &rehabPlan.Status, &rehabPlan.StartDate, &rehabPlan.Description)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
 		}
 		return nil, err
 	}
+	if patientID.Valid {
+		rehabPlan.PatientID = patientID.Int64
+	}
 
-	entriesQuery := `SELECT id, exercise_name, sets, reps, duration_seconds, weight, notes, order_index, completion_status, pain_level, patient_notes, therapist_comments
+	entriesQuery := `SELECT id, exercise_name, sets, reps, duration_seconds, weight, notes, order_index, completion_status, pain_level, fatigue_level, patient_notes, therapist_comments
 					 FROM workout_entries
 					 WHERE workout_id = $1
 					 ORDER BY order_index`
@@ -126,7 +152,7 @@ func (pg *PostgresRehabStore) GetRehabPlanByID(rehabPlanID int64) (*RehabPlan, e
 
 	for rows.Next() {
 		var entry RehabExercise
-		err := rows.Scan(&entry.ID, &entry.Exercise, &entry.Sets, &entry.Reps, &entry.DurationSeconds, &entry.Weight, &entry.Notes, &entry.OrderIndex, &entry.CompletionStatus, &entry.PainLevel, &entry.PatientNotes, &entry.TherapistComments)
+		err := rows.Scan(&entry.ID, &entry.Exercise, &entry.Sets, &entry.Reps, &entry.DurationSeconds, &entry.Weight, &entry.Notes, &entry.OrderIndex, &entry.CompletionStatus, &entry.PainLevel, &entry.FatigueLevel, &entry.PatientNotes, &entry.TherapistComments)
 		if err != nil {
 			return nil, err
 		}
@@ -139,10 +165,10 @@ func (pg *PostgresRehabStore) GetRehabPlanByID(rehabPlanID int64) (*RehabPlan, e
 // UpdateRehabPlan updates an existing rehab plan's main details.
 func (pg *PostgresRehabStore) UpdateRehabPlan(rehabPlan *RehabPlan) error {
 	query := `UPDATE workouts 
-			  SET patient_name = $1, therapist_name = $2, title = $3, goal = $4, status = $5, start_date = NULLIF($6, '')::date, description = $7
-			  WHERE id = $8`
+			  SET patient_id = NULLIF($1, 0), patient_name = $2, therapist_name = $3, title = $4, goal = $5, status = $6, start_date = NULLIF($7, '')::date, description = $8
+			  WHERE id = $9`
 
-	result, err := pg.db.Exec(query, rehabPlan.PatientName, rehabPlan.TherapistName, rehabPlan.Title, rehabPlan.Goal, rehabPlan.Status, rehabPlan.StartDate, rehabPlan.Description, rehabPlan.ID)
+	result, err := pg.db.Exec(query, rehabPlan.PatientID, rehabPlan.PatientName, rehabPlan.TherapistName, rehabPlan.Title, rehabPlan.Goal, rehabPlan.Status, rehabPlan.StartDate, rehabPlan.Description, rehabPlan.ID)
 	if err != nil {
 		return err
 	}
@@ -160,19 +186,26 @@ func (pg *PostgresRehabStore) UpdateRehabPlan(rehabPlan *RehabPlan) error {
 
 // UpdateRehabExercise updates an individual rehab exercise by ID.
 func (pg *PostgresRehabStore) UpdateRehabExercise(entry *RehabExercise) error {
+	// When an exercise is marked completed, set completed_at to now(); otherwise clear it.
+	var completedAt interface{}
+	if entry.CompletionStatus == "completed" {
+		completedAt = time.Now()
+	}
 	query := `UPDATE workout_entries
 			  SET exercise_name = $1,
-			      sets = $2,
-			      reps = $3,
-			      duration_seconds = $4,
-			      weight = $5,
-			      notes = $6,
-			      order_index = $7,
-			      completion_status = $8,
-			      pain_level = $9,
-			      patient_notes = $10,
-			      therapist_comments = $11
-			  WHERE id = $12`
+				  sets = $2,
+				  reps = $3,
+				  duration_seconds = $4,
+				  weight = $5,
+				  notes = $6,
+				  order_index = $7,
+				  completion_status = $8,
+				  pain_level = $9,
+				  fatigue_level = $10,
+				  patient_notes = $11,
+				  therapist_comments = $12,
+				  completed_at = $13
+			  WHERE id = $14`
 
 	result, err := pg.db.Exec(
 		query,
@@ -185,8 +218,10 @@ func (pg *PostgresRehabStore) UpdateRehabExercise(entry *RehabExercise) error {
 		entry.OrderIndex,
 		entry.CompletionStatus,
 		entry.PainLevel,
+		entry.FatigueLevel,
 		entry.PatientNotes,
 		entry.TherapistComments,
+		completedAt,
 		entry.ID,
 	)
 	if err != nil {
@@ -256,6 +291,7 @@ func (pg *PostgresRehabStore) ListRehabPlans() ([]RehabPlan, error) {
 	rows, err := pg.db.Query(`
 		SELECT
 			w.id,
+			w.patient_id,
 			w.patient_name,
 			w.therapist_name,
 			w.title,
@@ -267,7 +303,7 @@ func (pg *PostgresRehabStore) ListRehabPlans() ([]RehabPlan, error) {
 			COALESCE(AVG(e.pain_level), 0) AS average_pain
 		FROM workouts w
 		LEFT JOIN workout_entries e ON e.workout_id = w.id
-		GROUP BY w.id, w.patient_name, w.therapist_name, w.title, w.goal, w.status, w.start_date, w.description
+		GROUP BY w.id, w.patient_id, w.patient_name, w.therapist_name, w.title, w.goal, w.status, w.start_date, w.description
 		ORDER BY w.id DESC`)
 	if err != nil {
 		return nil, err
@@ -277,9 +313,13 @@ func (pg *PostgresRehabStore) ListRehabPlans() ([]RehabPlan, error) {
 	var plans []RehabPlan
 	for rows.Next() {
 		var p RehabPlan
+		var patientID sql.NullInt64
 		var patientName, therapistName, title, goal, status, startDate, description sql.NullString
-		if err := rows.Scan(&p.ID, &patientName, &therapistName, &title, &goal, &status, &startDate, &description, &p.EntryCount, &p.AveragePain); err != nil {
+		if err := rows.Scan(&p.ID, &patientID, &patientName, &therapistName, &title, &goal, &status, &startDate, &description, &p.EntryCount, &p.AveragePain); err != nil {
 			return nil, err
+		}
+		if patientID.Valid {
+			p.PatientID = patientID.Int64
 		}
 		if patientName.Valid {
 			p.PatientName = patientName.String
@@ -306,4 +346,49 @@ func (pg *PostgresRehabStore) ListRehabPlans() ([]RehabPlan, error) {
 	}
 
 	return plans, nil
+}
+
+// AnalyticsSnapshot returns daily aggregated metrics for the last `days` days (including today).
+func (pg *PostgresRehabStore) AnalyticsSnapshot(days int, patientID *int64) ([]AnalyticsPoint, error) {
+	if days <= 0 {
+		days = 7
+	}
+
+	query := `WITH days AS (
+		SELECT generate_series(date_trunc('day', now()) - ($1::int - 1) * interval '1 day', date_trunc('day', now()), '1 day') AS day
+	), stats AS (
+		SELECT date_trunc('day', COALESCE(e.completed_at, w.start_date))::date AS day,
+			   AVG(COALESCE(e.pain_level,0))::numeric::float8 AS avg_pain,
+			   AVG(COALESCE(e.fatigue_level,0))::numeric::float8 AS avg_fatigue,
+			   COUNT(*) FILTER (WHERE e.completion_status = 'completed') AS completed,
+			   COUNT(*) AS prescribed
+		FROM workout_entries e
+		JOIN workouts w ON w.id = e.workout_id
+		WHERE date_trunc('day', COALESCE(e.completed_at, w.start_date)) >= date_trunc('day', now()) - ($1::int - 1) * interval '1 day'
+		  AND ($2::bigint IS NULL OR w.patient_id = $2::bigint)
+		GROUP BY day
+	)
+	SELECT to_char(d.day, 'Dy') AS day_name,
+		   COALESCE(s.avg_pain, 0) AS pain,
+		   COALESCE(s.avg_fatigue, 0) AS fatigue,
+		   COALESCE(ROUND((s.completed::decimal / NULLIF(s.prescribed,0)) * 100), 0)::int AS adherence
+	FROM days d
+	LEFT JOIN stats s ON d.day::date = s.day
+	ORDER BY d.day;`
+
+	rows, err := pg.db.Query(query, days, patientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AnalyticsPoint
+	for rows.Next() {
+		var p AnalyticsPoint
+		if err := rows.Scan(&p.Day, &p.Pain, &p.Fatigue, &p.Adherence); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }

@@ -102,6 +102,13 @@ export function listRehabPlans() {
   return request('/rehab-plans');
 }
 
+export function createRehabPlan(payload) {
+  return request('/rehab-plans', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getRehabPlanById(planId) {
   return request(`/rehab-plans/${encodeURIComponent(planId)}`);
 }
@@ -122,6 +129,13 @@ export function deleteRehabPlan(planId) {
 export function updateRehabExercise(entryId, payload) {
   return request(`/rehab-exercises/${encodeURIComponent(entryId)}`, {
     method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function generateAISuggestions(payload) {
+  return request('/api/ai/chat', {
+    method: 'POST',
     body: JSON.stringify(payload),
   });
 }

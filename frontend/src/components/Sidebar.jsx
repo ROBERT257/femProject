@@ -9,18 +9,29 @@ const navItems = [
 
 export default function Sidebar({ active = 'dashboard', onSelect, onLogout }) {
   return (
-    <aside className="hidden w-64 flex-col border-r border-neutral-200 bg-white p-4 lg:flex dark:border-neutral-800 dark:bg-neutral-950">
-      <h2 className="mb-6 px-2 font-heading text-xl font-bold text-neutral-900 dark:text-white">AI Rehab</h2>
+    <aside className="hidden w-72 flex-col border-r border-white/50 bg-white/70 p-4 shadow-[12px_0_40px_rgba(15,23,42,0.05)] backdrop-blur-xl lg:flex dark:border-white/10 dark:bg-slate-950/60">
+      <div className="mb-5 rounded-[24px] border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-white/5">
+        <div className="flex items-center gap-3">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20">
+            <span className="font-heading text-lg font-extrabold tracking-tight">A</span>
+          </div>
+          <div>
+            <h2 className="font-heading text-xl font-bold tracking-tight text-slate-950 dark:text-white">AI Rehab</h2>
+            <p className="text-xs font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Recovery cockpit</p>
+          </div>
+        </div>
+      </div>
+
       <nav className="space-y-2">
         {navItems.map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={() => onSelect?.(item.key)}
-            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+            className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-all duration-200 ${
               active === item.key
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200'
+                : 'text-slate-600 hover:-translate-y-0.5 hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-white/5'
             }`}
           >
             <item.icon className="h-4 w-4" />
@@ -29,14 +40,16 @@ export default function Sidebar({ active = 'dashboard', onSelect, onLogout }) {
         ))}
       </nav>
 
-      <button
-        type="button"
-        onClick={onLogout}
-        className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-      >
-        <LogOut className="h-4 w-4" />
-        Logout
-      </button>
+      <div className="mt-auto pt-4">
+        <button
+          type="button"
+          onClick={onLogout}
+          className="flex w-full items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-rose-200 hover:text-rose-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:border-rose-500/30 dark:hover:text-rose-200"
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
+        </button>
+      </div>
     </aside>
   );
 }

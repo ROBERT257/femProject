@@ -24,6 +24,7 @@ type Application struct {
 	WearableHandler       *wearable.Handler
 	AccountHandler        *api.AccountHandler
 	RehabHandler          *api.RehabHandler
+	AnalyticsHandler      *api.AnalyticsHandler
 	Healthcheck           http.HandlerFunc
 	DB                    *sql.DB
 }
@@ -71,8 +72,9 @@ func NewApplication() (*Application, error) {
 	aiHandler := ai.NewHandler(aiService, aiLogger)
 	emailSender := api.NewSMTPEmailSenderFromEnv()
 
-	// 5. Create the RehabHandler
+	// 5. Create the RehabHandler and AnalyticsHandler
 	rehabHandler := api.NewRehabHandler(rehabStore)
+	analyticsHandler := api.NewAnalyticsHandler(rehabStore)
 	accountHandler := api.NewAccountHandler(accountStore, emailSender)
 
 	// 6. Bundle everything into the Application struct
@@ -84,6 +86,7 @@ func NewApplication() (*Application, error) {
 		WearableHandler:       wearableHandler,
 		AccountHandler:        accountHandler,
 		RehabHandler:          rehabHandler,
+		AnalyticsHandler:      analyticsHandler,
 		Healthcheck:           healthHandler,
 		DB:                    pgDB,
 	}

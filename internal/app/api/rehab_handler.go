@@ -169,7 +169,7 @@ func (wh *RehabHandler) HandleGetRehabProgress(w http.ResponseWriter, r *http.Re
 
 	type exerciseProgress struct {
 		Exercise          string `json:"exercise"`
-		CompletionStatus   string `json:"completion_status"`
+		CompletionStatus  string `json:"completion_status"`
 		PainLevel         int    `json:"pain_level"`
 		PatientNotes      string `json:"patient_notes"`
 		TherapistComments string `json:"therapist_comments"`
@@ -188,11 +188,11 @@ func (wh *RehabHandler) HandleGetRehabProgress(w http.ResponseWriter, r *http.Re
 		AveragePainLevel   float64            `json:"average_pain_level"`
 		Exercises          []exerciseProgress `json:"exercises"`
 	}{
-		PlanID:        rehabPlan.ID,
-		PatientName:   rehabPlan.PatientName,
-		TherapistName: rehabPlan.TherapistName,
-		Title:         rehabPlan.Title,
-		Status:        rehabPlan.Status,
+		PlanID:         rehabPlan.ID,
+		PatientName:    rehabPlan.PatientName,
+		TherapistName:  rehabPlan.TherapistName,
+		Title:          rehabPlan.Title,
+		Status:         rehabPlan.Status,
 		TotalExercises: len(rehabPlan.Entries),
 	}
 
@@ -200,7 +200,7 @@ func (wh *RehabHandler) HandleGetRehabProgress(w http.ResponseWriter, r *http.Re
 	for _, entry := range rehabPlan.Entries {
 		item := exerciseProgress{
 			Exercise:          entry.Exercise,
-			CompletionStatus:   entry.CompletionStatus,
+			CompletionStatus:  entry.CompletionStatus,
 			PainLevel:         entry.PainLevel,
 			PatientNotes:      entry.PatientNotes,
 			TherapistComments: entry.TherapistComments,
@@ -243,14 +243,55 @@ func (wh *RehabHandler) HandleUpdateRehabPlan(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var payload store.RehabPlan
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+	// Decode incoming payload into a generic map so we can perform a partial update
+	var incoming map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
 	}
 
-	payload.ID = int(id)
-	if err := wh.rehabStore.UpdateRehabPlan(&payload); err != nil {
+	// Fetch existing plan
+	existingPlan, err := wh.rehabStore.GetRehabPlanByID(id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Rehabilitation plan not found", http.StatusNotFound)
+			return
+		}
+		log.Println("❌ Failed to load existing plan:", err)
+		http.Error(w, "Failed to load rehabilitation plan", http.StatusInternalServerError)
+		return
+	}
+
+	// Merge incoming fields into existing plan (partial update semantics)
+	if v, ok := incoming["patient_name"].(string); ok {
+		existingPlan.PatientName = v
+	}
+	if v, ok := incoming["patient_id"].(float64); ok {
+		existingPlan.PatientID = int64(v)
+	}
+	if v, ok := incoming["therapist_name"].(string); ok {
+		existingPlan.TherapistName = v
+	}
+	if v, ok := incoming["title"].(string); ok {
+		existingPlan.Title = v
+	}
+	if v, ok := incoming["goal"].(string); ok {
+		existingPlan.Goal = v
+	}
+	if v, ok := incoming["status"].(string); ok {
+		existingPlan.Status = v
+	}
+	if v, ok := incoming["start_date"].(string); ok {
+		existingPlan.StartDate = v
+	}
+	if v, ok := incoming["description"].(string); ok {
+		existingPlan.Description = v
+	}
+
+	// Ensure the ID is set
+	existingPlan.ID = int(id)
+
+	if err := wh.rehabStore.UpdateRehabPlan(existingPlan); err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Rehabilitation plan not found", http.StatusNotFound)
 		} else {

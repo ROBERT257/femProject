@@ -37,6 +37,11 @@ export default function ExerciseRow({ entry, onChange, onSave, onDelete }) {
       </label>
 
       <label>
+        <span>Fatigue level</span>
+        <input type="number" min="0" max="10" value={local.fatigue_level ?? 0} onChange={(e) => update('fatigue_level', Number(e.target.value))} />
+      </label>
+
+      <label>
         <span>Patient notes</span>
         <input value={local.patient_notes || ''} onChange={(e) => update('patient_notes', e.target.value)} />
       </label>
